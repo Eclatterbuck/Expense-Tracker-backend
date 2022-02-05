@@ -14,6 +14,7 @@ const app = express()
 const mongoose = require("mongoose")
 const cors = require("cors")
 const morgan = require("morgan")
+const Expense = require("./models/expense")
 
 ///////////////////////////////
 // DATABASE CONNECTION
@@ -27,16 +28,15 @@ mongoose.connection
     .on("error", (error) => console.log(error))
 
 
-//////////////////////////////
-// MODELS
-////////////////////////////////
-const PeopleSchema = new mongoose.Schema({
-    name: String,
-    image: String,
-    title: String,
-})
 
-const People = mongoose.model("People", PeopleSchema)
+
+// const PeopleSchema = new mongoose.Schema({
+//     name: String,
+//     image: String,
+//     title: String,
+// })
+
+// const People = mongoose.model("People", PeopleSchema)
 
 ///////////////////////////////
 // MiddleWare
@@ -44,6 +44,26 @@ const People = mongoose.model("People", PeopleSchema)
 app.use(cors()) // to prevent cors errors, open access to all origins
 app.use(morgan("dev")) // logging
 app.use(express.json()) // parse json bodies
+
+
+const admin = require('firebase-admin');
+const serviceAccount = require('./service-account-credentials.json');
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+})
+async function isAuthenticated(req, res, next) {
+    try {
+        const token = req.get('Authorization');
+        if (!token) throw new Error('No token found, please login');
+        const user = await admin.auth().verifyIdToken(token.replace('Bearer ', ''));
+        if (!user) throw new Error('Something went wrong, invalid token');
+        req.user = user;
+        next();
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+}
+
 
 
 ///////////////////////////////
@@ -54,38 +74,41 @@ app.get("/", (req, res) => {
     res.send("hello world")
 })
 
-app.get('/people', async (req, res) => {
+app.get('/expense', isAuthenticated, async (req, res) => {
     try {
-        res.json(await People.find({}))
-    } catch (err) {
+        res.json(await Expense.find({}))
+    } catch (error) {
         res.status(400).json(error)
     }
 })
 
-app.post('/people', async (req, res) => {
-    try {
-        res.json(await People.create(req.body))
-    } catch (err) {
-        res.status(400).json(error)
-    }
-})
 
-// PEOPLE DELETE ROUTE
-app.delete("/people/:id", async (req, res) => {
+app.post('/expense', isAuthenticated, async (req, res) => {
+    console.log(req.body)
+        try {
+            res.json(await Expense.create(req.body))
+        } catch (error) {
+            res.status(400).json(error)
+        }
+    })
+    
+
+// Transaction DELETE ROUTE
+app.delete("/expense/:id", isAuthenticated, async (req, res) => {
     try {
-        res.json(await People.findByIdAndDelete(req.params.id))
+        res.json(await Expense.findByIdAndDelete(req.params.id))
     } catch (error) {
         //send error
         res.status(400).json(error)
     }
 })
 
-// PEOPLE UPDATE ROUTE
-app.put("/people/:id", async (req, res) => {
+// Transactions UPDATE ROUTE
+app.put("/expense/:id", isAuthenticated, async (req, res) => {
     try {
-        // send all people
+        // send all transactions
         res.json(
-            await People.findByIdAndUpdate(req.params.id, req.body, { new: true })
+            await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true })
         )
     } catch (error) {
         //send error
